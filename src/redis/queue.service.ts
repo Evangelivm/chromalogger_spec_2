@@ -1,110 +1,130 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { RedisService } from './redis.service';
 import { MysqlService } from './mysql.service';
+import { QueueConfig, QueuePair } from './queue.config';
 
 @Injectable()
 export class QueueService implements OnModuleInit {
-  private readonly QUEUE_1 = 'queue1';
-  private readonly QUEUE_2 = 'queue2';
-  private readonly PROCESSING_FLAG = 'processingQueue2';
+  private queuesConfig: Record<string, QueuePair>;
 
   constructor(
     private readonly redisService: RedisService,
     private readonly mysqlService: MysqlService,
-  ) {}
+  ) {
+    this.queuesConfig = QueueConfig.getQueuesConfig();
+  }
 
-  // Este método se ejecuta cuando el módulo se inicializa
   onModuleInit() {
-    this.startProcessingQueue2();
+    Object.keys(this.queuesConfig).forEach((projectName) => {
+      this.startProcessingQueue2(projectName);
+    });
   }
 
-  async startProcessingQueue2() {
-    console.log('Iniciando el procesamiento de queue2...');
-    await this.processQueue2(); // Llama a la función para empezar el procesamiento de forma continua
+  async startProcessingQueue2(projectName: string) {
+    console.log(`Iniciando el procesamiento de queue2 para ${projectName}...`);
+    await this.processQueue2(projectName);
   }
 
-  async enqueueData(data: string[]) {
+  async enqueueData(data: string[], projectName: string) {
+    const queues = this.queuesConfig[projectName];
     for (const item of data) {
-      await this.redisService.pushToQueue(this.QUEUE_1, item);
-      await this.processQueue1();
+      await this.redisService.pushToQueue(queues.queue1, item);
+      await this.processQueue1(projectName);
     }
   }
 
-  async processQueue1() {
-    const data = await this.redisService.popFromQueue(this.QUEUE_1);
+  async processQueue1(projectName: string) {
+    const queues = this.queuesConfig[projectName];
+    const data = await this.redisService.popFromQueue(queues.queue1);
     if (data) {
       const processingQueue2 = await this.redisService.getProcessingFlag(
-        this.PROCESSING_FLAG,
+        queues.processingFlag,
       );
       if (processingQueue2 !== 'true') {
-        await this.redisService.pushToQueue(this.QUEUE_2, data);
+        await this.redisService.pushToQueue(queues.queue2, data);
         const queueLength = Number(
-          await this.redisService.getQueueLength(this.QUEUE_2),
+          await this.redisService.getQueueLength(queues.queue2),
         );
-        console.log('\x1b[35m%s\x1b[0m', `Queue 2a: ${queueLength}`);
+        console.log(
+          '\x1b[35m%s\x1b[0m',
+          `Queue 2a [${projectName}]: ${queueLength}`,
+        );
       }
     }
   }
 
-  async processQueue2() {
+  async processQueue2(projectName: string) {
+    const queues = this.queuesConfig[projectName];
     while (true) {
       const queueLength = Number(
-        await this.redisService.getQueueLength(this.QUEUE_2),
+        await this.redisService.getQueueLength(queues.queue2),
       );
-      console.log('\x1b[34m%s\x1b[0m', `Queue 2b: ${queueLength}`);
+      console.log(
+        '\x1b[34m%s\x1b[0m',
+        `Queue 2b [${projectName}]: ${queueLength}`,
+      );
 
       if (queueLength >= 100) {
         console.log(
           '\x1b[33m%s\x1b[0m',
-          `Queue 2 with 100 elements, Process...`,
+          `Queue 2 with 100 elements for ${projectName}, Process...`,
         );
-        await this.redisService.setProcessingFlag(this.PROCESSING_FLAG, 'true');
+        await this.redisService.setProcessingFlag(
+          queues.processingFlag,
+          'true',
+        );
 
         const dataToInsert = [];
-
         for (let i = 0; i < 100; i++) {
-          const data = await this.redisService.popFromQueue(this.QUEUE_2);
+          const data = await this.redisService.popFromQueue(queues.queue2);
           if (data) {
             dataToInsert.push(data);
           }
         }
-        //console.log(dataToInsert);
-        await this.mysqlService.insertData(dataToInsert);
-        console.log('\x1b[36m%s\x1b[0m', 'Info sent to DB!!');
+
+        await this.mysqlService.insertData(dataToInsert, projectName);
+        console.log(
+          '\x1b[36m%s\x1b[0m',
+          `Info sent to DB for ${projectName}!!`,
+        );
 
         await this.redisService.setProcessingFlag(
-          this.PROCESSING_FLAG,
+          queues.processingFlag,
           'false',
         );
-        console.log('\x1b[33m%s\x1b[0m', 'Process flag to false');
+        console.log(
+          '\x1b[33m%s\x1b[0m',
+          `Process flag to false for ${projectName}`,
+        );
 
-        await this.restoreQueue1();
+        await this.restoreQueue1(projectName);
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Espera de 1 segundo
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }
 
-  private async restoreQueue1() {
+  private async restoreQueue1(projectName: string) {
+    const queues = this.queuesConfig[projectName];
     while (true) {
-      const data = await this.redisService.popFromQueue(this.QUEUE_1);
+      const data = await this.redisService.popFromQueue(queues.queue1);
       if (!data) {
         console.log(
           '\x1b[33m%s\x1b[0m',
-          'No more data in Queue 1 to move to Queque 2',
+          `No more data in Queue 1 to move to Queue 2 for ${projectName}`,
         );
         break;
       }
-      await this.redisService.pushToQueue(this.QUEUE_2, data);
+      await this.redisService.pushToQueue(queues.queue2, data);
       const queueLength = Number(
-        await this.redisService.getQueueLength(this.QUEUE_2),
+        await this.redisService.getQueueLength(queues.queue2),
       );
       console.log(
         '\x1b[33m%s\x1b[0m',
-        `Datos restaurados de la cola 1 a la cola 2: ${data}`,
+        `Data restored from queue 1 to queue 2 for ${projectName}: ${data}`,
       );
       console.log(
-        `Tamaño actual de la cola 2 después de restaurar: ${queueLength}`,
+        `Current queue 2 size after restore for ${projectName}: ${queueLength}`,
       );
     }
   }
