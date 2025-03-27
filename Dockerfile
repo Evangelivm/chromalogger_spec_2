@@ -1,6 +1,9 @@
 # Usa una imagen base de Node.js
 FROM node:18
 
+# Instala mysql-client para poder verificar la base de datos
+RUN apt-get update && apt-get install -y default-mysql-client
+
 # Establece el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
@@ -21,11 +24,15 @@ RUN npx prisma generate
 # Copia el resto de los archivos del proyecto
 COPY . .
 
+# Copia el script de inicialización y dale permisos de ejecución
+COPY init.sh .
+RUN chmod +x init.sh
+
 # Compila el código TypeScript
 RUN npm run build
 
 # Expone el puerto que usará la aplicación
 EXPOSE 3000
 
-# Comando para sincronizar el esquema con la base de datos y ejecutar la aplicación
-CMD ["sh", "-c", "npx prisma db push && npm run start:prod"]
+# Usa el script de inicialización como punto de entrada
+CMD ["./init.sh"]
