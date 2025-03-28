@@ -99,6 +99,13 @@ Caso contrario, usa este comando:
 docker-compose up
 ```
 
+Actualizacion 28/03/2025: Ahora ejecuta el proyecto solo con estos comandos, usando los archivos connections.config.ts y code-map.ts se creara los puertos del docker compose, se creara el modelo con las tablas a partir de los parametros y conexiones indicadas en estos archivos y se ejecutara, esto solo se debe hacer en la primera vez:
+
+```bash
+chmod +x compose-up.sh
+./compose-up.sh
+```
+
 Traten de siempre tener las colas de redis limpias para evitar trabas!!!!!
 
 Si tiene algun problema con redis, puede usar este comando:
