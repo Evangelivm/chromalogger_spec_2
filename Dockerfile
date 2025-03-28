@@ -2,7 +2,8 @@
 FROM node:18
 
 # Instala mysql-client para poder verificar la base de datos
-RUN apt-get update && apt-get install -y default-mysql-client
+RUN apt-get update && apt-get install -y default-mysql-client \
+    && rm -rf /var/lib/apt/lists/*
 
 # Establece el directorio de trabajo dentro del contenedor
 WORKDIR /app
@@ -25,8 +26,8 @@ RUN npx prisma generate
 COPY . .
 
 # Copia el script de inicialización y dale permisos de ejecución
-COPY init.sh .
-RUN chmod +x init.sh
+COPY init.sh generate-prisma-schema.sh ./
+RUN chmod +x init.sh generate-prisma-schema.sh
 
 # Compila el código TypeScript
 RUN npm run build

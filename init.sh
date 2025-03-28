@@ -11,7 +11,11 @@ done
 TABLE_EXISTS=$(mysql -h"db_container_name" -u"root" -p"rootpassword" test_chroma -e "SHOW TABLES LIKE 'test_record_1';" 2>/dev/null)
 
 if [ -z "$TABLE_EXISTS" ]; then
-    echo "Tables do not exist. Running prisma db push..."
+    echo "Tables do not exist. Generating Prisma schema..."
+    # Ejecutar el script para generar el schema.prisma
+    ./generate-prisma-schema.sh
+    
+    echo "Running prisma db push..."
     npx prisma db push
 else
     echo "Tables already exist. Skipping prisma db push..."
